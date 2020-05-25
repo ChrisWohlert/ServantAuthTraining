@@ -11,32 +11,27 @@
 
 module API where
 
-import Data.Aeson                       (ToJSON)
-import Data.ByteString                  (ByteString)
-import Data.Map                         (Map, fromList)
+import Data.Aeson                       
+import Data.ByteString                  
+import Data.Map                         
 import qualified Data.Map            as Map
-import Data.Proxy                       (Proxy (Proxy))
-import Data.Text                        (Text, unpack)
-import GHC.Generics                     (Generic)
-import Network.Wai                      (Request, requestHeaders)
-import Network.Wai.Handler.Warp         (run)
-import Servant.API                      ((:<|>) ((:<|>)), (:>), BasicAuth,
-                                          Get, JSON, QueryParam, Headers, Header, NoContent, addHeader)
-import Servant.API.BasicAuth            (BasicAuthData (BasicAuthData))
-import Servant.API.Experimental.Auth    (AuthProtect)
-import Servant                          (throwError)
-import Servant.Server                   (BasicAuthCheck (BasicAuthCheck),
-                                         BasicAuthResult( Authorized
-                                                        , Unauthorized
-                                                        ),
-                                         Context ((:.), EmptyContext),
-                                         err401, err403, errBody, Server,
-                                         serveWithContext, Handler)
+import Data.Proxy                       
+import Data.Text                        
+import GHC.Generics                     
+import Network.Wai                      
+import Network.Wai.Handler.Warp         
+import Servant.API                      
+import Servant.API.BasicAuth            
+import Servant.API.Experimental.Auth    
+import Servant                          
+import Servant.Server                   
 import Servant.Server.Experimental.Auth
-import Web.Cookie                       (parseCookies, SetCookie, setCookieName, def, setCookieValue, setCookieHttpOnly)
+import Web.Cookie                      
 import Database
-import Database.Persist.Sql 
-
+import Database.Persist.Sql
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Except
+import Control.Monad.IO.Class (liftIO)
 
 
 -- | private data that needs protection
@@ -50,13 +45,15 @@ newtype PublicData = PublicData { somedata :: Text }
   deriving (Eq, Show, Generic)
 
 instance ToJSON PublicData
+instance ToJSON User
 
 -- | A user we'll grab from the database when we authenticate someone
 newtype User = User { userName :: Text }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
 -- | a type to wrap our public api
 type PublicAPI = "login" :> QueryParam "username" Text :> QueryParam "password" Text :> Get '[JSON] (Headers '[Header "Set-Cookie" SetCookie] [PublicData])
+            :<|> "test" :> Get '[JSON] [User]
 
 -- | a type to wrap our private api
 type PrivateAPI = Get '[JSON] PrivateData
@@ -87,8 +84,8 @@ authHandler = mkAuthHandler handler
   maybeToEither e = maybe (Left e) Right
   throw401 msg = throwError $ err401 { errBody = msg }
   handler req = either throw401 lookupAccount $ do
-    cookie <- maybeToEither "Missing cookie header" $ lookup "cookie" $ requestHeaders req
-    maybeToEither "Missing token in cookie" $ lookup "servant-auth-cookie" $ parseCookies cookie
+    cookie <- maybeToEither "Missing cookie header" $ Prelude.lookup "cookie" $ requestHeaders req
+    maybeToEither "Missing token in cookie" $ Prelude.lookup "servant-auth-cookie" $ parseCookies cookie
 
     -- | Our API, with auth-protection
 type AuthGenAPI = "private" :> AuthProtect "cookie-auth" :> PrivateAPI
@@ -111,18 +108,40 @@ genAuthServerContext = authHandler :. EmptyContext
 -- point. Note that 'privateDataFunc' is a function that takes 'Account' as an
 -- argument. We dont' worry about the authentication instrumentation here,
 -- that is taken care of by supplying context
-genAuthServer :: Server AuthGenAPI
+genAuthServer :: ServerT AuthGenAPI App
 genAuthServer =
-  let privateDataFunc (Account name) =
-          return (PrivateData ("this is a secret: " <> name))
-  in  privateDataFunc :<|> login
+  let privateDataFunc (Account name) = do
+      pool <- db <$> ask
+      return (PrivateData ("this is a secret: " <> name))
+  in privateDataFunc :<|> login :<|> getUsers
 
-login (Just name) (Just pw) = return $ addHeader (def { setCookieName = "servant-auth-cookie", setCookieValue = "key3", setCookieHttpOnly = True }) [PublicData ("Hello: " <> name)]
+login :: Maybe Text -> Maybe Text -> App (Headers '[Header "Set-Cookie" SetCookie] [PublicData])
+login (Just name) (Just pw) = do
+  pool <- db <$> ask
+  pure $ addHeader (def { setCookieName = "servant-auth-cookie", setCookieValue = "key3", setCookieHttpOnly = True }) [PublicData ("Hello: " <> name)]
 login _ _ = throwError err401
+
+getUsers :: App [User]
+getUsers = do
+  pool <- db <$> ask
+  return [User "username"]
 
   -- | run our server
 genAuthMain :: IO ()
 genAuthMain = do
   pool <- makePool
   runSqlPool (runMigration migrateAll) pool
-  run 8080 (serveWithContext genAuthAPI genAuthServerContext genAuthServer)
+  run 8080 $ app $ AppEnv { db = pool }
+
+app s = 
+  serveWithContext genAuthAPI genAuthServerContext $
+    hoistServerWithContext genAuthAPI (Proxy :: Proxy (AuthHandler Request Account ': '[]))
+      (flip runReaderT s) genAuthServer
+
+data AppEnv = AppEnv { db :: ConnectionPool }
+type App = ReaderT AppEnv Handler
+
+nt :: AppEnv -> App a -> Handler a
+nt s x = runReaderT x s
+
+

@@ -23,13 +23,13 @@ import DatabaseConfig
 import Data.Time.Clock
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-User
+UserDatabaseModel
     publicKey UUID sqltype=uuid   default=uuid_generate_v4()
     username String
     password String
     Primary publicKey
-    deriving Show
     sessionId SessionId
+    deriving Show
 Session
     key UUID sqltype=uuid default=uuid_generate_v4()
     expiresAt UTCTime
