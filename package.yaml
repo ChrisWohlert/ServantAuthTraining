@@ -34,6 +34,15 @@ dependencies:
 - wai-session
 - vault
 - http-api-data
+- persistent
+- monad-logger
+- persistent-postgresql
+- persistent-template
+- transformers
+- uuid
+- time
+- path-pieces
+- postgresql-libpq
 
 library:
   source-dirs: src

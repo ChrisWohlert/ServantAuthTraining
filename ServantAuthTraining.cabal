@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e152de5a46be83107550e48c3cd88add69931e54b2698bc03f4d9731fb4ea11a
+-- hash: 37caaad72d2329021b355b761d2cbb550a7bb816f2b5e00a2d92bff498da0902
 
 name:           ServantAuthTraining
 version:        0.1.0.0
@@ -28,6 +28,8 @@ source-repository head
 library
   exposed-modules:
       API
+      Database
+      DatabaseConfig
       Lib
   other-modules:
       Paths_ServantAuthTraining
@@ -40,9 +42,18 @@ library
     , containers
     , cookie
     , http-api-data
+    , monad-logger
+    , path-pieces
+    , persistent
+    , persistent-postgresql
+    , persistent-template
+    , postgresql-libpq
     , servant
     , servant-server
     , text
+    , time
+    , transformers
+    , uuid
     , vault
     , wai
     , wai-session
@@ -64,9 +75,18 @@ executable ServantAuthTraining-exe
     , containers
     , cookie
     , http-api-data
+    , monad-logger
+    , path-pieces
+    , persistent
+    , persistent-postgresql
+    , persistent-template
+    , postgresql-libpq
     , servant
     , servant-server
     , text
+    , time
+    , transformers
+    , uuid
     , vault
     , wai
     , wai-session
@@ -89,9 +109,18 @@ test-suite ServantAuthTraining-test
     , containers
     , cookie
     , http-api-data
+    , monad-logger
+    , path-pieces
+    , persistent
+    , persistent-postgresql
+    , persistent-template
+    , postgresql-libpq
     , servant
     , servant-server
     , text
+    , time
+    , transformers
+    , uuid
     , vault
     , wai
     , wai-session

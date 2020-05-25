@@ -14,7 +14,6 @@ module API where
 import Data.Aeson                       (ToJSON)
 import Data.ByteString                  (ByteString)
 import Data.Map                         (Map, fromList)
-import Data.Monoid                      ((<>))
 import qualified Data.Map            as Map
 import Data.Proxy                       (Proxy (Proxy))
 import Data.Text                        (Text, unpack)
@@ -33,10 +32,12 @@ import Servant.Server                   (BasicAuthCheck (BasicAuthCheck),
                                          Context ((:.), EmptyContext),
                                          err401, err403, errBody, Server,
                                          serveWithContext, Handler)
-import Servant.Server.Experimental.Auth (AuthHandler, AuthServerData,
-                                         mkAuthHandler)
-import Servant.Server.Experimental.Auth()
+import Servant.Server.Experimental.Auth
 import Web.Cookie                       (parseCookies, SetCookie, setCookieName, def, setCookieValue, setCookieHttpOnly)
+import Database
+import Database.Persist.Sql 
+
+
 
 -- | private data that needs protection
 newtype PrivateData = PrivateData { ssshhh :: Text }
@@ -121,4 +122,7 @@ login _ _ = throwError err401
 
   -- | run our server
 genAuthMain :: IO ()
-genAuthMain = run 8080 (serveWithContext genAuthAPI genAuthServerContext genAuthServer)
+genAuthMain = do
+  pool <- makePool
+  runSqlPool (runMigration migrateAll) pool
+  run 8080 (serveWithContext genAuthAPI genAuthServerContext genAuthServer)
