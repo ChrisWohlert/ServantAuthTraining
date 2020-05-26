@@ -32,6 +32,9 @@ import Database.Persist.Sql
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Except
 import Control.Monad.IO.Class (liftIO)
+import Config
+import Data.UUID
+import GHC.TypeLits
 
 
 -- | private data that needs protection
@@ -47,73 +50,78 @@ newtype PublicData = PublicData { somedata :: Text }
 instance ToJSON PublicData
 instance ToJSON User
 
--- | A user we'll grab from the database when we authenticate someone
+
 newtype User = User { userName :: Text }
   deriving (Eq, Show, Generic)
 
--- | a type to wrap our public api
+
 type PublicAPI = "login" :> QueryParam "username" Text :> QueryParam "password" Text :> Get '[JSON] (Headers '[Header "Set-Cookie" SetCookie] [PublicData])
             :<|> "test" :> Get '[JSON] [User]
 
--- | a type to wrap our private api
+type GetList a = Get '[JSON] [a]
+type GetOne a i = Capture "id" i :> Get '[JSON] a
+type CreateNew a = ReqBody '[JSON] a :> Post '[JSON] NoContent
+
+type Crud (name :: Symbol) a i = name :> 
+  ( GetList a
+  , GetOne a i
+  , CreateNew a
+  )
+
+data Book = Book { isbn :: String } deriving (Show, Generic)
+
+instance ToJSON Book
+
+type Redirect a = Headers '[Header "location" a] NoContent
+
 type PrivateAPI = Get '[JSON] PrivateData
--- | An account type that we "fetch from the database" after
--- performing authentication
-newtype Account = Account { unAccount :: Text }
 
--- | A (pure) database mapping keys to accounts.
-database :: Map ByteString Account
-database = fromList [ ("key1", Account "Anne Briggs")
-                    , ("key2", Account "Bruce Cockburn")
-                    , ("key3", Account "Ghédalia Tazartès")
-                    ]
 
--- | A method that, when given a password, will return a Account.
--- This is our bespoke (and bad) authentication logic.
-lookupAccount :: ByteString -> Handler Account
-lookupAccount key = case Map.lookup key database of
-  Nothing -> throwError (err403 { errBody = "Invalid Cookie" })
-  Just usr -> return usr
 
-  --- | The auth handler wraps a function from Request -> Handler Account.
---- We look for a token in the request headers that we expect to be in the cookie.
---- The token is then passed to our `lookupAccount` function.
-authHandler :: AuthHandler Request Account
-authHandler = mkAuthHandler handler
+lookupAccount :: ConnectionPool -> ByteString -> Handler User
+lookupAccount pool sessionId = do
+  maybeUser <- runWithPool pool (selectFirst [] [])
+  case maybeUser of
+    Nothing -> throwError (err403 { errBody = "Invalid Cookie" })
+    (Just u) -> return $ toUser u
+
+
+authHandler :: ConnectionPool -> AuthHandler Request User
+authHandler pool = mkAuthHandler handler
   where
   maybeToEither e = maybe (Left e) Right
   throw401 msg = throwError $ err401 { errBody = msg }
-  handler req = either throw401 lookupAccount $ do
+  handler req = either throw401 (lookupAccount pool) $ do
     cookie <- maybeToEither "Missing cookie header" $ Prelude.lookup "cookie" $ requestHeaders req
     maybeToEither "Missing token in cookie" $ Prelude.lookup "servant-auth-cookie" $ parseCookies cookie
 
-    -- | Our API, with auth-protection
+
 type AuthGenAPI = "private" :> AuthProtect "cookie-auth" :> PrivateAPI
              :<|> PublicAPI
+             :<|> Crud "book" Book UUID
 
--- | A value holding our type-level API
+
 genAuthAPI :: Proxy AuthGenAPI
 genAuthAPI = Proxy
 
--- | We need to specify the data returned after authentication
-type instance AuthServerData (AuthProtect "cookie-auth") = Account
 
--- | The context that will be made available to request handlers. We supply the
--- "cookie-auth"-tagged request handler defined above, so that the 'HasServer' instance
--- of 'AuthProtect' can extract the handler and run it on the request.
-genAuthServerContext :: Context (AuthHandler Request Account ': '[])
-genAuthServerContext = authHandler :. EmptyContext
+type instance AuthServerData (AuthProtect "cookie-auth") = User
 
--- | Our API, where we provide all the author-supplied handlers for each end
--- point. Note that 'privateDataFunc' is a function that takes 'Account' as an
--- argument. We dont' worry about the authentication instrumentation here,
--- that is taken care of by supplying context
+
+genAuthServerContext :: ConnectionPool -> Context (AuthHandler Request User ': '[])
+genAuthServerContext pool = authHandler pool :. EmptyContext
+
+
 genAuthServer :: ServerT AuthGenAPI App
-genAuthServer =
-  let privateDataFunc (Account name) = do
-      pool <- db <$> ask
-      return (PrivateData ("this is a secret: " <> name))
-  in privateDataFunc :<|> login :<|> getUsers
+genAuthServer = privateDataFunc :<|> login :<|> getUsers :<|> bookCrud
+
+bookCrud = return [Book "asd"] :<|> (\ _ -> return (Book "dsa")) :<|> \ _ -> return NoContent
+
+redirect link = return $ addHeader link NoContent
+
+privateDataFunc (User name) = do
+  pool <- asks db
+  return (PrivateData ("this is a secret: " <> name))
 
 login :: Maybe Text -> Maybe Text -> App (Headers '[Header "Set-Cookie" SetCookie] [PublicData])
 login (Just name) (Just pw) = do
@@ -123,8 +131,11 @@ login _ _ = throwError err401
 
 getUsers :: App [User]
 getUsers = do
-  pool <- db <$> ask
-  return [User "username"]
+  users <- runQuery (selectList [] [])
+  return $ Prelude.map toUser users
+
+toUser :: Entity UserDatabaseModel -> User
+toUser (Entity k (UserDatabaseModel key name pw)) = User (Data.Text.pack name)
 
   -- | run our server
 genAuthMain :: IO ()
@@ -133,13 +144,11 @@ genAuthMain = do
   runSqlPool (runMigration migrateAll) pool
   run 8080 $ app $ AppEnv { db = pool }
 
-app s = 
-  serveWithContext genAuthAPI genAuthServerContext $
-    hoistServerWithContext genAuthAPI (Proxy :: Proxy (AuthHandler Request Account ': '[]))
-      (flip runReaderT s) genAuthServer
+app cfg = 
+  serveWithContext genAuthAPI (genAuthServerContext (db cfg)) $
+    hoistServerWithContext genAuthAPI (Proxy :: Proxy (AuthHandler Request User ': '[]))
+      (flip runReaderT cfg) genAuthServer
 
-data AppEnv = AppEnv { db :: ConnectionPool }
-type App = ReaderT AppEnv Handler
 
 nt :: AppEnv -> App a -> Handler a
 nt s x = runReaderT x s

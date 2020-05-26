@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 37caaad72d2329021b355b761d2cbb550a7bb816f2b5e00a2d92bff498da0902
+-- hash: 53932a8450c287b419f2cc5f4db59789dbf9da442c5192d401928d621b82990e
 
 name:           ServantAuthTraining
 version:        0.1.0.0
@@ -28,6 +28,7 @@ source-repository head
 library
   exposed-modules:
       API
+      Config
       Database
       DatabaseConfig
       Lib

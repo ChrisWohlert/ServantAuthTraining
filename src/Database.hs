@@ -21,19 +21,22 @@ import Database.Persist.TH
 import Data.UUID
 import DatabaseConfig
 import Data.Time.Clock
+import Config
+import Control.Monad.IO.Class (liftIO)
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-UserDatabaseModel
-    publicKey UUID sqltype=uuid   default=uuid_generate_v4()
+UserDatabaseModel sql=user
+    key UUID sqltype=uuid   default=uuid_generate_v4() sql=id
     username String
     password String
-    Primary publicKey
-    sessionId SessionId
+    Primary key
     deriving Show
-Session
-    key UUID sqltype=uuid default=uuid_generate_v4()
+SessionDatabaseModel sql=session
+    key UUID sqltype=uuid default=uuid_generate_v4() sql=id
     expiresAt UTCTime
     Primary key
+    userId UserDatabaseModelId
+    UniqueUserId
 |]
 
 -- authorId PersonId
@@ -42,3 +45,10 @@ connStr = "host=localhost dbname=test user=postgres password=test port=5432"
 
 makePool :: IO ConnectionPool
 makePool = runStderrLoggingT $ createPostgresqlPool connStr 10
+
+
+runQuery query = do
+    pool <- asks db
+    liftIO $ runSqlPool query pool
+
+runWithPool pool query  = liftIO $ runSqlPool query pool
