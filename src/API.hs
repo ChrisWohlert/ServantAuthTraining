@@ -162,3 +162,52 @@ app cfg =
 nt :: AppEnv -> App a -> Handler a
 nt s x = runReaderT x s
 
+
+
+
+
+
+
+
+
+
+
+
+-- GENERICS
+
+class CountFields a where
+  -- | Return number of constuctor fields for a value.
+  countFields :: a -> Int
+
+instance CountFields (V1 p) where
+  countFields _ = 0
+
+instance CountFields (U1 p) where
+  countFields _ = 0
+
+instance CountFields (K1 i c p) where
+  countFields _ = 1
+
+instance CountFields (f p) => CountFields (M1 i c f p) where
+  countFields (M1 x) = countFields x
+
+instance (CountFields (a p), CountFields (b p)) => CountFields ((a :+: b) p) where
+  countFields (L1 x) = countFields x
+  countFields (R1 x) = countFields x
+
+instance (CountFields (a p), CountFields (b p)) => CountFields ((a :*: b) p) where
+  countFields (a :*: b) = countFields a + countFields b
+
+
+
+
+instance CountFields Book 
+
+
+
+
+
+
+
+
+
