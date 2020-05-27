@@ -112,10 +112,11 @@ genAuthServerContext pool = authHandler pool :. EmptyContext
 
 
 genAuthServer :: ServerT AuthGenAPI App
-genAuthServer = getBooks :<|> editBook :<|> createBook
+genAuthServer = crud (\ (UserDatabaseModel k u p) -> Book "isbn")
 
-getBooks :: App [Book]
-getBooks = (return [Book "asd"])
+getBooks f = do
+  elements <- runQuery (selectList [] [])
+  return $ Prelude.map f . Prelude.map (\ (Entity k v) -> v) $ elements
 
 editBook :: UUID -> App Book
 editBook _ = return (Book "dsa")
@@ -123,6 +124,7 @@ editBook _ = return (Book "dsa")
 createBook :: Book -> App NoContent
 createBook b = return NoContent
 
+crud f = getBooks f :<|> editBook :<|> createBook
 
 redirect link = return $ addHeader link NoContent
 
@@ -159,5 +161,4 @@ app cfg =
 
 nt :: AppEnv -> App a -> Handler a
 nt s x = runReaderT x s
-
 
