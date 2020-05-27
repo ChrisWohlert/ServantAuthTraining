@@ -63,14 +63,15 @@ type GetOne a i = Capture "id" i :> Get '[JSON] a
 type CreateNew a = ReqBody '[JSON] a :> Post '[JSON] NoContent
 
 type Crud (name :: Symbol) a i = name :> 
-  ( GetList a
-  , GetOne a i
-  , CreateNew a
+  (    GetList a
+  :<|> GetOne a i
+  :<|> CreateNew a
   )
 
 data Book = Book { isbn :: String } deriving (Show, Generic)
 
 instance ToJSON Book
+instance FromJSON Book
 
 type Redirect a = Headers '[Header "location" a] NoContent
 
@@ -96,9 +97,7 @@ authHandler pool = mkAuthHandler handler
     maybeToEither "Missing token in cookie" $ Prelude.lookup "servant-auth-cookie" $ parseCookies cookie
 
 
-type AuthGenAPI = "private" :> AuthProtect "cookie-auth" :> PrivateAPI
-             :<|> PublicAPI
-             :<|> Crud "book" Book UUID
+type AuthGenAPI = Crud "book" Book UUID
 
 
 genAuthAPI :: Proxy AuthGenAPI
@@ -113,9 +112,17 @@ genAuthServerContext pool = authHandler pool :. EmptyContext
 
 
 genAuthServer :: ServerT AuthGenAPI App
-genAuthServer = privateDataFunc :<|> login :<|> getUsers :<|> bookCrud
+genAuthServer = getBooks :<|> editBook :<|> createBook
 
-bookCrud = return [Book "asd"] :<|> (\ _ -> return (Book "dsa")) :<|> \ _ -> return NoContent
+getBooks :: App [Book]
+getBooks = (return [Book "asd"])
+
+editBook :: UUID -> App Book
+editBook _ = return (Book "dsa")
+  
+createBook :: Book -> App NoContent
+createBook b = return NoContent
+
 
 redirect link = return $ addHeader link NoContent
 
