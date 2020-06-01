@@ -8,9 +8,12 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE DefaultSignatures     #-}
+{-# LANGUAGE PolyKinds             #-}
 
 module API where
 
+import Type.Reflection
 import Data.Aeson                       
 import Data.ByteString                  
 import Data.Map                         
@@ -35,6 +38,7 @@ import Control.Monad.IO.Class (liftIO)
 import Config
 import Data.UUID
 import GHC.TypeLits
+
 
 
 -- | private data that needs protection
@@ -175,39 +179,61 @@ nt s x = runReaderT x s
 
 -- GENERICS
 
-class CountFields a where
-  -- | Return number of constuctor fields for a value.
-  countFields :: a -> Int
+data InputField = InputField { iptype :: String, ipValue :: String, ipName :: String } deriving (Show)
 
-instance CountFields (V1 p) where
-  countFields _ = 0
+class ToForm' f where
+  toForm' :: f p -> [InputField]
 
-instance CountFields (U1 p) where
-  countFields _ = 0
+class ToForm a where
+  toForm :: a -> [InputField]
+  default toForm :: (Generic a, ToForm' (Rep a)) => a -> [InputField]
+  toForm x = toForm' (from x)
 
-instance CountFields (K1 i c p) where
-  countFields _ = 1
+instance ToForm' V1 where
+  toForm' = undefined
 
-instance CountFields (f p) => CountFields (M1 i c f p) where
-  countFields (M1 x) = countFields x
+instance ToForm' U1 where
+  toForm' U1 = []
 
-instance (CountFields (a p), CountFields (b p)) => CountFields ((a :+: b) p) where
-  countFields (L1 x) = countFields x
-  countFields (R1 x) = countFields x
+instance (ToForm' f, ToForm' g) => ToForm' (f :+: g) where
+  toForm' (L1 x) = toForm' x
+  toForm' (R1 x) = toForm' x
 
-instance (CountFields (a p), CountFields (b p)) => CountFields ((a :*: b) p) where
-  countFields (a :*: b) = countFields a + countFields b
+instance (ToForm' f, ToForm' g) => ToForm' (f :*: g) where
+  toForm' (x :*: y) = toForm' x ++ toForm' y
 
+instance (ToForm c) => ToForm' (K1 i c) where
+  toForm' (K1 x) = toForm x
 
-
-
-instance CountFields Book 
-
-
-
+instance (ToForm' f) => ToForm' (M1 i t f) where
+  toForm' (M1 x) = toForm' x
 
 
 
 
+data Test = TestUser { tusername :: String, tpassword :: String, tage :: Int, tsession :: Session } deriving (Show, Generic)
 
+data Session = Session { sid :: String, sexpires :: String } deriving (Show, Generic)
 
+instance ToForm Char where
+  toForm x = []
+
+instance ToForm Test
+instance ToForm Session
+
+instance {-# Overlaps #-} (Selector s, ToInputField t) => ToForm' (M1 S s (K1 R t)) where
+  toForm' x@(M1 e) = [(toInputField (selName x) (unK1 e))]
+
+class ToInputField a where
+  toInputField :: String -> a -> InputField
+
+instance ToInputField String where
+  toInputField n v = InputField "text" v n
+
+instance ToInputField Int where
+  toInputField n v = InputField "number" (show v) n
+  
+instance ToInputField Session where
+  toInputField n (Session sid sexpires) = InputField "text" sid n
+
+showTest = toForm $ TestUser "a" "b" 4 (Session "c" "d")

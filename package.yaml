@@ -43,6 +43,7 @@ dependencies:
 - time
 - path-pieces
 - postgresql-libpq
+- generics-sop
 
 library:
   source-dirs: src

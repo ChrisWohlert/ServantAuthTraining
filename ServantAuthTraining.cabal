@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 53932a8450c287b419f2cc5f4db59789dbf9da442c5192d401928d621b82990e
+-- hash: e3d2ee2cd24d45ec2acbb1637e01f167d5f3658a368f7eff887b02179da313de
 
 name:           ServantAuthTraining
 version:        0.1.0.0
@@ -31,6 +31,7 @@ library
       Config
       Database
       DatabaseConfig
+      GenericTraining
       Lib
   other-modules:
       Paths_ServantAuthTraining
@@ -42,6 +43,7 @@ library
     , bytestring
     , containers
     , cookie
+    , generics-sop
     , http-api-data
     , monad-logger
     , path-pieces
@@ -75,6 +77,7 @@ executable ServantAuthTraining-exe
     , bytestring
     , containers
     , cookie
+    , generics-sop
     , http-api-data
     , monad-logger
     , path-pieces
@@ -109,6 +112,7 @@ test-suite ServantAuthTraining-test
     , bytestring
     , containers
     , cookie
+    , generics-sop
     , http-api-data
     , monad-logger
     , path-pieces
