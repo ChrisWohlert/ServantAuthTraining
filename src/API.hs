@@ -209,15 +209,16 @@ instance (ToForm' f) => ToForm' (M1 i t f) where
   toForm' (M1 x) = toForm' x
 
 
+data FormInput (a :: Symbol) b = FormInput b deriving (Show, Generic)
 
-
-data Test = TestUser { tusername :: String, tpassword :: String, tage :: Int, tsession :: Session } deriving (Show, Generic)
+data Test = TestUser { tusername :: FormInput "test" String, tpassword :: String, tage :: Int, tsession :: Session } deriving (Show, Generic)
 
 data Session = Session { sid :: String, sexpires :: String } deriving (Show, Generic)
 
 instance ToForm Char where
   toForm x = []
 
+instance ToForm (FormInput "test" String)
 instance ToForm Test
 instance ToForm Session
 
@@ -230,10 +231,13 @@ class ToInputField a where
 instance ToInputField String where
   toInputField n v = InputField "text" v n
 
+instance (ToInputField b, KnownSymbol a) => ToInputField (FormInput a b) where
+  toInputField n (FormInput v) = toInputField n v
+
 instance ToInputField Int where
   toInputField n v = InputField "number" (show v) n
   
 instance ToInputField Session where
   toInputField n (Session sid sexpires) = InputField "text" sid n
 
-showTest = toForm $ TestUser "a" "b" 4 (Session "c" "d")
+showTest = toForm $ TestUser (FormInput "a") "b" 4 (Session "c" "d")

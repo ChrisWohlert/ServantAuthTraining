@@ -52,5 +52,5 @@ instance FromForm Test
 
 instance FromHttpApiData Session where
   parseQueryParam f = Session
-    <$> parseUnique "sid" f
-    <*> parseUnique "sexpires" f
+    <$> parseUrlPiece (Data.Text.pack . Prelude.takeWhile (/= '&') . Data.Text.unpack $ f)
+    <*> parseUrlPiece (Data.Text.pack . Prelude.tail . Prelude.dropWhile (/= '&') . Data.Text.unpack $ f)
