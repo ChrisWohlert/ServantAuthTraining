@@ -43,14 +43,3 @@ import GHC.Generics
 import Data.Data
 import Data.Either
 import Web.FormUrlEncoded
-
-data Test = TestUser { tusername :: String, tpassword :: String, tage :: Int, tsesssion :: Session } deriving (Show, Generic)
-
-data Session = Session { sid :: String, sexpires :: String } deriving (Show, Generic)
-
-instance FromForm Test
-
-instance FromHttpApiData Session where
-  parseQueryParam f = Session
-    <$> parseUrlPiece (Data.Text.pack . Prelude.takeWhile (/= '&') . Data.Text.unpack $ f)
-    <*> parseUrlPiece (Data.Text.pack . Prelude.tail . Prelude.dropWhile (/= '&') . Data.Text.unpack $ f)

@@ -10,6 +10,7 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 
 module API where
 
@@ -179,7 +180,9 @@ nt s x = runReaderT x s
 
 -- GENERICS
 
-data InputField = InputField { iptype :: String, ipValue :: String, ipName :: String } deriving (Show)
+data InputField = InputField { iptype :: String, ipValue :: String, ipName :: String } 
+                | LabelField LabelText InputField 
+                deriving (Show) 
 
 class ToForm' f where
   toForm' :: f p -> [InputField]
@@ -209,16 +212,17 @@ instance (ToForm' f) => ToForm' (M1 i t f) where
   toForm' (M1 x) = toForm' x
 
 
-data FormInput (a :: Symbol) b = FormInput b deriving (Show, Generic)
+data LabelText = LabelUsername | PasswordLabel deriving (Show)
 
-data Test = TestUser { tusername :: FormInput "test" String, tpassword :: String, tage :: Int, tsession :: Session } deriving (Show, Generic)
+data FormInput a = FormInput LabelText a deriving (Show, Generic)
+
+data Test = TestUser { tusername :: FormInput String, tpassword :: String, tage :: Int, tsession :: Session } deriving (Show, Generic)
 
 data Session = Session { sid :: String, sexpires :: String } deriving (Show, Generic)
 
 instance ToForm Char where
   toForm x = []
 
-instance ToForm (FormInput "test" String)
 instance ToForm Test
 instance ToForm Session
 
@@ -231,8 +235,8 @@ class ToInputField a where
 instance ToInputField String where
   toInputField n v = InputField "text" v n
 
-instance (ToInputField b, KnownSymbol a) => ToInputField (FormInput a b) where
-  toInputField n (FormInput v) = toInputField n v
+instance (ToInputField a) => ToInputField (FormInput a) where
+  toInputField n (FormInput l v) = LabelField l (toInputField n v)
 
 instance ToInputField Int where
   toInputField n v = InputField "number" (show v) n
@@ -240,4 +244,4 @@ instance ToInputField Int where
 instance ToInputField Session where
   toInputField n (Session sid sexpires) = InputField "text" sid n
 
-showTest = toForm $ TestUser (FormInput "a") "b" 4 (Session "c" "d")
+showTest = toForm $ TestUser (FormInput LabelUsername "a") "b" 4 (Session "c" "d")
